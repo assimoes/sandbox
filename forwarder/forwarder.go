@@ -29,7 +29,7 @@ func main() {
 	serverAddress := ":3000"
 
 	if err := http.ListenAndServe(serverAddress, nil); err != nil {
-		customLogger.Log("Kafka", fmt.Sprintf("Error starting forwarder: %v", err), err, "error-correlation-id", "error-execution-id")
+		customLogger.Log("error", fmt.Sprintf("error starting forwarder: %v", err), err, "", "")
 	}
 }
 
@@ -44,14 +44,12 @@ func request(w http.ResponseWriter, r *http.Request) {
 	var dataReq shared.DataRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&dataReq); err != nil {
-		customLogger.Log("Kafka", fmt.Sprintf("Error decoding data request: %v", err), err, correlationID, dataReq.ExecutionID)
+		customLogger.Log("error", fmt.Sprintf("error decoding data request: %v", err), err, correlationID, dataReq.ExecutionID)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	dataReq.CorrelationID = correlationID
-
-	customLogger.Log("Kafka", fmt.Sprintf("Publishing request with correlation ID: %s", correlationID), nil, correlationID, dataReq.ExecutionID)
 
 	w.WriteHeader(http.StatusOK)
 
@@ -72,9 +70,11 @@ func request(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	}, customLogger); err != nil {
-		customLogger.Log("Kafka", fmt.Sprintf("Error when publishing to control topic: %v", err), err, correlationID, dataReq.ExecutionID)
+		customLogger.Log("error", fmt.Sprintf("error when publishing to control topic: %v", err), err, correlationID, dataReq.ExecutionID)
 		w.WriteHeader(http.StatusBadRequest)
 	}
+
+	customLogger.Log("kafka", fmt.Sprintf("Published request with correlation ID: %s", correlationID), nil, correlationID, dataReq.ExecutionID)
 
 	json.NewEncoder(w).Encode(dataRes)
 }
@@ -90,7 +90,7 @@ func commit(w http.ResponseWriter, r *http.Request) {
 	var commitReq shared.CommitRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&commitReq); err != nil {
-		customLogger.Log("Kafka", fmt.Sprintf("Error decoding commit request: %v", err), err, correlationID, commitReq.ExecutionID)
+		customLogger.Log("error", fmt.Sprintf("error decoding commit request: %v", err), err, correlationID, commitReq.ExecutionID)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -98,10 +98,10 @@ func commit(w http.ResponseWriter, r *http.Request) {
 	var topic string
 	if commitReq.Commit {
 		topic = "commit"
-		customLogger.Log("Kafka", fmt.Sprintf("Publishing commit with correlation ID: %s", correlationID), nil, correlationID, commitReq.ExecutionID)
+		customLogger.Log("kafka", fmt.Sprintf("publishing commit with correlation ID: %s", correlationID), nil, correlationID, commitReq.ExecutionID)
 	} else {
 		topic = "cancel"
-		customLogger.Log("Kafka", fmt.Sprintf("Publishing cancel with correlation ID: %s", correlationID), nil, correlationID, commitReq.ExecutionID)
+		customLogger.Log("kafka", fmt.Sprintf("publishing cancel with correlation ID: %s", correlationID), nil, correlationID, commitReq.ExecutionID)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -125,7 +125,7 @@ func publish(topic string, messages []kafka.Message, customLogger *logger.Custom
 	})
 
 	if err := k.WriteMessages(context.Background(), messages...); err != nil {
-		customLogger.Log("Kafka", fmt.Sprintf("Error when publishing to %s topic: %v", topic, err), err, "", "")
+		customLogger.Log("error", fmt.Sprintf("error when publishing to %s topic: %v", topic, err), err, "", "")
 		return err
 	}
 

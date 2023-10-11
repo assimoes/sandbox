@@ -55,7 +55,7 @@ func readTopic(topic string) (chan kafka.Message, chan error) {
 
 func errorLogger(topic string, errCh chan error, customLogger *logger.CustomLogger) {
 	for err := range errCh {
-		customLogger.Log(topic, fmt.Sprintf("error reading from %s topic: %v", topic, err), err, "", "")
+		customLogger.Log("error", fmt.Sprintf("error reading from %s topic: %v", topic, err), err, "", "")
 	}
 }
 
@@ -78,7 +78,7 @@ func processDataRequests(controlCh chan kafka.Message, customLogger *logger.Cust
 			data.ExecutionID = executionID
 		}
 
-		customLogger.Log("Kafka", fmt.Sprintf("consumed event request %s", data.ExecutionID), nil, data.CorrelationID, data.ExecutionID)
+		customLogger.Log("kafka", fmt.Sprintf("consumed event request %s", data.ExecutionID), nil, data.CorrelationID, data.ExecutionID)
 
 	}
 }

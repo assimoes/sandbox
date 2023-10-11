@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -37,7 +36,7 @@ func main() {
 			executionID, _ := uuid.NewUUID()
 			data := createDataRequest(executionID.String())
 			if err := sendData(data, customLogger); err != nil {
-				customLogger.Log("Forwarder", fmt.Sprintf("Error sending data: %v", err), err, data.CorrelationID, executionID.String())
+				customLogger.Log("forwarder", fmt.Sprintf("Error sending data: %v", err), err, data.CorrelationID, executionID.String())
 			}
 		}
 	}()
@@ -45,7 +44,7 @@ func main() {
 	http.HandleFunc("/callback", callback)
 	err := http.ListenAndServe(":"+externalPort, nil)
 	if err != nil {
-		customLogger.Log("Forwarder", fmt.Sprintf("Error starting HTTP server: %v", err), err, "error-correlation-id", "error-execution-id")
+		customLogger.Log("forwarder", fmt.Sprintf("Error starting HTTP server: %v", err), err, "error-correlation-id", "error-execution-id")
 	}
 }
 
@@ -66,13 +65,13 @@ func callback(w http.ResponseWriter, r *http.Request) {
 	executionID := r.URL.Query().Get("execution_id")
 
 	if correlationID == "" {
-		customLogger.Log("Forwarder", "Missing correlation id", nil, "error-correlation-id", "")
+		customLogger.Log("error", "Missing correlation id", nil, "", "")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	if executionID == "" {
-		customLogger.Log("Forwarder", "Missing execution id", nil, "error-execution-id", "")
+		customLogger.Log("error", "Missing execution id", nil, "", "")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -84,7 +83,7 @@ func callback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := commit(cr, customLogger); err != nil {
-		customLogger.Log("Forwarder", fmt.Sprintf("Error committing message to forwarder: %v", err), err, correlationID, executionID)
+		customLogger.Log("error", fmt.Sprintf("error committing message to forwarder: %v", err), err, correlationID, executionID)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -102,8 +101,8 @@ func commit(cr shared.CommitRequest, customLogger *logger.CustomLogger) error {
 	}
 	defer res.Body.Close()
 
-	body, _ := io.ReadAll(res.Body)
-	customLogger.Log("Forwarder", fmt.Sprintf("Response from forwarder: %s", body), nil, cr.CorrelationID, cr.ExecutionID)
+	//_, _ = io.ReadAll(res.Body)
+	customLogger.Log("forwarder", fmt.Sprintf("Response code from forwarder: %s", res.Status), nil, cr.CorrelationID, cr.ExecutionID)
 
 	return nil
 }
@@ -116,8 +115,7 @@ func sendData(data shared.DataRequest, customLogger *logger.CustomLogger) error 
 	}
 	defer res.Body.Close()
 
-	body, _ := io.ReadAll(res.Body)
-	customLogger.Log("Forwarder", fmt.Sprintf("Response from forwarder: %s", body), nil, data.CorrelationID, data.ExecutionID)
+	customLogger.Log("forwarder", fmt.Sprintf("Response code from forwarder: %s", res.Status), nil, data.CorrelationID, data.ExecutionID)
 
 	return nil
 }
