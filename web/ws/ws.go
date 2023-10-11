@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 	"sync"
 
@@ -20,7 +20,7 @@ var lock = sync.RWMutex{}                    // lock for concurrent access to th
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Println("Error during WebSocket upgrade:", err)
+		log.Println("Error during WebSocket upgrade:", err)
 		return
 	}
 
@@ -29,20 +29,20 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	clients[ws] = true
 	lock.Unlock()
 
-	fmt.Println("Client connected")
+	log.Println("Client connected")
 
 	defer func() {
 		lock.Lock()
 		delete(clients, ws)
 		lock.Unlock()
 		ws.Close()
-		fmt.Println("Client disconnected")
+		log.Println("Client disconnected")
 	}()
 
 	for {
 		messageType, p, err := ws.ReadMessage()
 		if err != nil {
-			fmt.Println("Error while reading message:", err)
+			log.Println("Error while reading message:", err)
 			break
 		}
 
@@ -50,7 +50,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		lock.RLock()
 		for client := range clients {
 			if err := client.WriteMessage(messageType, p); err != nil {
-				fmt.Println("Error while writing message:", err)
+				log.Println("Error while writing message:", err)
 				lock.Lock()
 				delete(clients, client)
 				lock.Unlock()
@@ -58,13 +58,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		}
 		lock.RUnlock()
 
-		fmt.Println("Received and broadcasted message")
+		log.Println("Received and broadcasted message")
 	}
 }
 
 func main() {
 	http.HandleFunc("/ws", handleConnections)
-	fmt.Println("WebSocket server started on :8081")
+	log.Println("WebSocket server started on :8081")
 	err := http.ListenAndServe(":8899", nil)
 	if err != nil {
 		panic("Error starting server: " + err.Error())

@@ -7,12 +7,12 @@ services:
     hostname: broker
     container_name: broker
     ports:
-      - "9092:9092"
+      - "9099:9099"
       - "9101:9101"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://broker:29099,PLAINTEXT_HOST://localhost:9099'
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
@@ -21,7 +21,7 @@ services:
       KAFKA_JMX_HOSTNAME: localhost
       KAFKA_PROCESS_ROLES: 'broker,controller'
       KAFKA_CONTROLLER_QUORUM_VOTERS: '1@broker:29093'
-      KAFKA_LISTENERS: 'PLAINTEXT://broker:29092,CONTROLLER://broker:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_LISTENERS: 'PLAINTEXT://broker:29099,CONTROLLER://broker:29093,PLAINTEXT_HOST://0.0.0.0:9099'
       KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
@@ -39,7 +39,7 @@ services:
       - "8081:8081"
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'broker:29092'
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'broker:29099'
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
 
   connect:
@@ -52,7 +52,7 @@ services:
     ports:
       - "8083:8083"
     environment:
-      CONNECT_BOOTSTRAP_SERVERS: 'broker:29092'
+      CONNECT_BOOTSTRAP_SERVERS: 'broker:29099'
       CONNECT_REST_ADVERTISED_HOST_NAME: connect
       CONNECT_GROUP_ID: compose-connect-group
       CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
@@ -82,9 +82,9 @@ services:
       - connect
       - ksqldb-server
     ports:
-      - "9021:9021"
+      - "9022:9021"
     environment:
-      CONTROL_CENTER_BOOTSTRAP_SERVERS: 'broker:29092'
+      CONTROL_CENTER_BOOTSTRAP_SERVERS: 'broker:29099'
       CONTROL_CENTER_CONNECT_CONNECT-DEFAULT_CLUSTER: 'connect:8083'
       CONTROL_CENTER_CONNECT_HEALTHCHECK_ENDPOINT: '/connectors'
       CONTROL_CENTER_KSQL_KSQLDB1_URL: "http://ksqldb-server:8088"
@@ -107,7 +107,7 @@ services:
       - "8088:8088"
     environment:
       KSQL_CONFIG_DIR: "/etc/ksql"
-      KSQL_BOOTSTRAP_SERVERS: "broker:29092"
+      KSQL_BOOTSTRAP_SERVERS: "broker:29099"
       KSQL_HOST_NAME: ksqldb-server
       KSQL_LISTENERS: "http://0.0.0.0:8088"
       KSQL_CACHE_MAX_BYTES_BUFFERING: 0
@@ -141,7 +141,7 @@ services:
       - schema-registry
       - connect
     command: "bash -c 'echo Waiting for Kafka to be ready... && \
-                       cub kafka-ready -b broker:29092 1 40 && \
+                       cub kafka-ready -b broker:29099 1 40 && \
                        echo Waiting for Confluent Schema Registry to be ready... && \
                        cub sr-ready schema-registry 8081 40 && \
                        echo Waiting a few seconds for topic creation to finish... && \
@@ -149,7 +149,7 @@ services:
                        tail -f /dev/null'"
     environment:
       KSQL_CONFIG_DIR: "/etc/ksql"
-      STREAMS_BOOTSTRAP_SERVERS: broker:29092
+      STREAMS_BOOTSTRAP_SERVERS: broker:29099
       STREAMS_SCHEMA_REGISTRY_HOST: schema-registry
       STREAMS_SCHEMA_REGISTRY_PORT: 8081
 
@@ -164,7 +164,7 @@ services:
     container_name: rest-proxy
     environment:
       KAFKA_REST_HOST_NAME: rest-proxy
-      KAFKA_REST_BOOTSTRAP_SERVERS: 'broker:29092'
+      KAFKA_REST_BOOTSTRAP_SERVERS: 'broker:29099'
       KAFKA_REST_LISTENERS: "http://0.0.0.0:8082"
       KAFKA_REST_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
 
@@ -174,4 +174,68 @@ services:
     depends_on:
       - broker
     restart: "no"
-    entrypoint: ["bash","-c","sleep 10 && kafka-topics --create --topic control --bootstrap-server localhost:9092 && kafka-topics --create --topic commit --bootstrap-server localhost:9092 && kafka-topics --create --topic event_topic --bootstrap-server localhost:9092"]
+    entrypoint: ["bash","-c","sleep 10 && kafka-topics --create --topic control --bootstrap-server localhost:9099 && kafka-topics --create --topic commit --bootstrap-server localhost:9099 && kafka-topics --create --topic event_topic --bootstrap-server localhost:9099"]
+
+
+  producer:
+    build:
+      context: .
+      dockerfile: producer/Dockerfile
+    image: producer:latest
+    container_name: producer_a
+    environment:
+      - FORWARDER_URL=http://forwarder:3000
+      - EXTERNAL_NAME=producer_a
+      - EXTERNAL_PORT=8888
+      - FRIENDLY_NAME=producer_a
+    labels:
+      - type=sandbox
+    ports:
+      - "8888:8888"
+    
+
+      
+  forwarder:
+    build:
+      context: .
+      dockerfile: forwarder/Dockerfile
+    image: forwarder:latest
+    container_name: forwarder
+    environment:
+      - KAFKA_BROKER=broker:29099
+      - FRIENDLY_NAME=forwarder
+    labels:
+      - type=sandbox
+    ports:
+      - "3000:3000"
+
+  monitor:
+    build:
+      context: .
+      dockerfile: monitor/Dockerfile
+    image: monitor:latest
+    container_name: monitor
+    environment:
+      - KAFKA_BROKER=broker:29099
+      - FRIENDLY_NAME=monitor_a
+    labels:
+      - type=sandbox
+
+  consumer_a:
+    build:
+      context: .
+      dockerfile: consumer/Dockerfile
+    image: consumer:latest
+    container_name: consumer_a
+    environment:
+      - KAFKA_BROKER=broker:29099
+      - FRIENDLY_NAME=consumer_a
+    labels:
+      - type=sandbox
+
+  mongo:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+      

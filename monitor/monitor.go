@@ -5,23 +5,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 
-	"github.com/assimoes/rtd-sandbox/logger" // Import the logger package
+	"github.com/assimoes/rtd-sandbox/logger"
 	"github.com/assimoes/rtd-sandbox/shared"
 	"github.com/segmentio/kafka-go"
 )
 
 var (
-	broker       = os.Getenv("KAFKA_BROKER")
-	friendlyName = os.Getenv("FRIENDLY_NAME") // Get the friendly name from environment variable
+	broker       = shared.GetEnv("KAFKA_BROKER", "localhost:9092")
+	friendlyName = shared.GetEnv("FRIENDLY_NAME", "monitor")
 )
 
 func main() {
+
 	controlCh, controlErrCh := readTopic("control")
 	commitCh, commitErrCh := readTopic("commit")
 
-	// Initialize the custom logger with the friendly name.
 	customLogger := logger.New(friendlyName)
 
 	go errorLogger("control", controlErrCh, customLogger)
@@ -127,7 +126,7 @@ func processCommitRequests(commitCh chan kafka.Message, customLogger *logger.Cus
 
 			evtData, _ := json.Marshal(evt)
 
-			err := publish("event", []kafka.Message{{
+			err := publish("e_topic", []kafka.Message{{
 				Key:       []byte(evt.CorrelationID),
 				Value:     evtData,
 				Partition: 0,

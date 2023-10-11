@@ -1,4 +1,3 @@
-// Package main provides an application for processing Docker logs based on YAML configuration and storing them in MongoDB.
 package main
 
 import (

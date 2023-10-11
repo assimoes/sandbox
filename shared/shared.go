@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"os"
 	"time"
 )
 
@@ -20,6 +21,12 @@ type DataRequest struct {
 	ExecutionID   string    `json:"execution_id"`
 }
 
+type EventRequest struct {
+	ServiceName   string `json:"service_name"`
+	CorrelationID string `json:"correlation_id"`
+	ExecutionID   string `json:"execution_id"`
+}
+
 type DataResponse struct {
 	Status        string `json:"status"`
 	CorrelationID string `json:"correlation_id"`
@@ -34,4 +41,29 @@ type Event struct {
 type Message struct {
 	Topic   string `json:"topic"`
 	Content string `json:"content"`
+}
+
+type LogEntry struct {
+	ExecutionID string `json:"execution_id"`
+	Message     string `json:"message"`
+}
+
+// LogData contains the log data to be stored.
+type LogData struct {
+	Container     string      `json:"container"`
+	CorrelationID string      `json:"correlation_id"`
+	ExecutionID   string      `json:"execution_id"`
+	FriendlyName  string      `json:"friendly_name"`
+	Timestamp     string      `json:"timestamp"`
+	Target        string      `json:"target"`
+	Log           LogEntry    `json:"log"`
+	Error         interface{} `json:"error,omitempty"`
+}
+
+func GetEnv(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
 }

@@ -7,7 +7,6 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
@@ -17,11 +16,11 @@ import (
 )
 
 var (
-	forwarderURL  = getEnv("FORWARDER_URL", "http://localhost:3000")
-	externalName  = getEnv("EXTERNAL_NAME", "localhost")
-	externalPort  = getEnv("EXTERNAL_PORT", "8888")
+	forwarderURL  = shared.GetEnv("FORWARDER_URL", "http://localhost:3000")
+	externalName  = shared.GetEnv("EXTERNAL_NAME", "localhost")
+	externalPort  = shared.GetEnv("EXTERNAL_PORT", "8888")
 	tickerTimeout = 5 * time.Second
-	friendlyName  = getEnv("FRIENDLY_NAME", "producer_a")
+	friendlyName  = shared.GetEnv("FRIENDLY_NAME", "producer_a")
 	customLogger  *logger.CustomLogger
 )
 
@@ -121,14 +120,6 @@ func sendData(data shared.DataRequest, customLogger *logger.CustomLogger) error 
 	customLogger.Log("Forwarder", fmt.Sprintf("Response from forwarder: %s", body), nil, data.CorrelationID, data.ExecutionID)
 
 	return nil
-}
-
-func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	return value
 }
 
 func randBool() bool {

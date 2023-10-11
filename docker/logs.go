@@ -1,4 +1,3 @@
-// Package main provides functionalities for processing and storing logs.
 package main
 
 import (
@@ -7,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/docker/docker/api/types"
@@ -69,6 +69,10 @@ func processLogs(ctx context.Context, cli *client.Client, collection *mongo.Coll
 func handleLogEntry(ctx context.Context, collection *mongo.Collection, logLineStr, containerID, containerName string) {
 	var parsedLog map[string]interface{}
 
+	if len(logLineStr) < 10 {
+		return
+	}
+
 	logLineStr = logLineStr[8:]
 
 	if err := json.Unmarshal([]byte(logLineStr), &parsedLog); err != nil {
@@ -80,10 +84,17 @@ func handleLogEntry(ctx context.Context, collection *mongo.Collection, logLineSt
 	target, _ := parsedLog["target"].(string)
 	logError := parsedLog["error"]
 
+	msg, err := toJSONString(parsedLog["log"])
+
+	if err != nil {
+		log.Println("failed to decode log entry: %v", err)
+		return
+	}
+
 	logEntry := LogEntry{
 		ExecutionID:   parsedLog["execution_id"].(string),
 		CorrelationID: parsedLog["correlation_id"].(string),
-		Message:       parsedLog["log"].(string),
+		Message:       msg,
 	}
 
 	logData := LogData{
@@ -99,8 +110,16 @@ func handleLogEntry(ctx context.Context, collection *mongo.Collection, logLineSt
 	filter := bson.D{{"_id", hash}}
 	update := bson.D{{"$setOnInsert", logData}}
 
-	_, err := collection.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+	_, err = collection.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
 	if err != nil {
 		log.Printf("Failed to upsert log for container %s: %v", containerID, err)
 	}
+}
+
+func toJSONString(v interface{}) (string, error) {
+	bytes, err := json.Marshal(v)
+	if err != nil {
+		return "", fmt.Errorf("error marshalling value to JSON: %w", err)
+	}
+	return string(bytes), nil
 }

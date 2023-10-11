@@ -1,4 +1,3 @@
-// Package main provides Docker-related functionalities for processing logs.
 package main
 
 import (

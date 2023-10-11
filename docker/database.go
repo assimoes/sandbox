@@ -1,4 +1,3 @@
-// Package main provides MongoDB-related functionalities for storing logs.
 package main
 
 import (
