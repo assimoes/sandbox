@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -29,7 +28,7 @@ func main() {
 
 	app := fiber.New()
 
-	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
@@ -66,11 +65,28 @@ func getExecIds(c *fiber.Ctx) error {
 	pageSize := 25
 	skip := (page - 1) * pageSize
 
+	matchStage := bson.D{
+		{"$match", bson.D{
+			{"log.executionid", bson.D{
+				{"$ne", ""},
+			}},
+		}},
+	}
+
 	groupStage := bson.D{
 		{"$group", bson.D{
-			{"_id", "$execution_id"},
-			{"timestamp", bson.D{{"$first", "$timestamp"}}},
-		}}}
+			{"_id", "$log.executionid"},
+			{"execution_id", bson.D{
+				{"$first", "$log.executionid"},
+			}},
+			{"count", bson.D{
+				{"$sum", 1},
+			}},
+			{"timestamp", bson.D{
+				{"$first", "$timestamp"},
+			}},
+		}},
+	}
 
 	sortStage := bson.D{
 		{"$sort", bson.D{
@@ -86,53 +102,60 @@ func getExecIds(c *fiber.Ctx) error {
 		{"$limit", int64(pageSize)},
 	}
 
-	cursor, err := collection.Aggregate(ctx, mongo.Pipeline{groupStage, sortStage, skipStage, limitStage})
+	cursor, err := collection.Aggregate(ctx, mongo.Pipeline{matchStage, groupStage, sortStage, skipStage, limitStage})
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).SendString("error fetching execution ids from mongo")
+		return c.Status(http.StatusInternalServerError).SendString(err.Error())
 	}
 
 	var executionIDs []string
 
 	for cursor.Next(ctx) {
+
 		var result struct {
 			ID string `bson:"_id"`
 		}
 
 		if err := cursor.Decode(&result); err != nil {
-			return c.Status(http.StatusInternalServerError).SendString("error deconding execution id")
+			return c.Status(http.StatusInternalServerError).SendString("error decoding execution id")
 		}
+
+		executionIDs = append(executionIDs, result.ID)
+	}
+
+	// Calculate the total count of execution IDs
+	totalCount, err := collection.Distinct(ctx, "log.executionid", bson.D{})
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).SendString("error counting execution IDs")
+	}
+
+	totalPages := len(totalCount) / pageSize
+
+	if len(totalCount)%pageSize != 0 {
+		totalPages++
 	}
 
 	response := map[string]interface{}{
 		"page":        page,
-		"total_pages": len(executionIDs) / pageSize,
+		"total_pages": totalPages,
 		"data":        executionIDs,
 	}
 
 	return c.JSON(response)
 }
-
 func getExecDetails(c *fiber.Ctx) error {
-	executionId := c.Params("execution_id")
+	executionID := c.Params("execution_id")
 
-	if executionId == "" {
+	if executionID == "" {
 		return c.Status(http.StatusBadRequest).SendString("invalid execution id")
 	}
 
-	matchStage := bson.D{
-		{"$match", bson.D{
-			{"execution_id", executionId},
-		}}}
+	filter := bson.M{"log.executionid": executionID}
 
-	sortStage := bson.D{
-		{"$sort", bson.D{
-			{"timestamp", 1},
-		}},
-	}
+	opts := options.Find().SetSort(bson.D{{"timestamp", 1}})
 
-	cursor, err := collection.Aggregate(ctx, mongo.Pipeline{matchStage, sortStage})
+	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).SendString("error fetching execution ids from mongo")
+		return c.Status(http.StatusInternalServerError).SendString("error fetching execution details from mongo")
 	}
 
 	var executionDetails []map[string]interface{}
@@ -147,7 +170,7 @@ func getExecDetails(c *fiber.Ctx) error {
 	}
 
 	response := map[string]interface{}{
-		"execution_id": executionId,
+		"execution_id": executionID,
 		"data":         executionDetails,
 	}
 
